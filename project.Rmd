@@ -1,0 +1,69 @@
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+beach_volleyball <- read_csv("Beach Volleyball.csv")
+volleyball <- read_csv("Volleyball.csv")
+teams <- read_csv("teams.csv")
+athletes <- read_csv("athletes.csv")
+```
+
+
+```{r}
+beach_volleyball_clean <- beach_volleyball %>%
+  select(date, event_code, gender, event_stage, stage, discipline_code, participant_code, 
+         participant_name, participant_country_code, result, result_WLT, start_order)
+
+volleyball_clean <- volleyball %>%
+    select(date, event_code, event_stage, gender, discipline_code, participant_code, 
+         participant_name, participant_country_code, result, result_WLT, start_order)
+
+athletes_clean <- athletes %>%
+    rename(function_role = 'function') |> 
+    mutate(code = as.character(code)) |>
+    select(code, name, gender, function_role, country_code, nationality_code, height, weight, 
+         disciplines, events, birth_date, birth_country, coach, hero, influence, 
+         reason, sporting_relatives, other_sports)
+```
+
+
+```{r}
+teams_expanded <- teams %>%
+    mutate(athletes_codes = gsub("\\[|\\]|'", "", athletes_codes)) |> 
+    separate_rows(athletes_codes, sep = ", ") %>%
+    rename(athlete_code = athletes_codes) %>%
+    left_join(athletes_clean, by = c("athlete_code" = "code")) %>%
+    select(code, team, team_gender, country, athlete_code, name)
+```
+
+
+```{r}
+
+volleyball_with_athletes <- volleyball_clean %>%
+  left_join(teams_expanded, by = c("participant_code" = "code"))
+
+beach_volleyball_athletes <- beach_volleyball_clean %>%
+  left_join(teams_expanded, by = c("participant_code" = "code"))
+
+
+combined_volleyball <- bind_rows(
+  mutate(beach_volleyball_athletes, dataset = "Beach Volleyball"),
+  mutate(volleyball_with_athletes, dataset = "Volleyball")
+)
+```
+
+
+```{r}
+final_combined <- combined_volleyball %>%
+  left_join(athletes_clean, by = c("athlete_code" = "code")) %>%
+  select(
+    date, event_code, gender.x, event_stage, stage, discipline_code, participant_code,
+    participant_name, participant_country_code, result, result_WLT, start_order,
+    team, team_gender, country, athlete_code, name.x, dataset, 
+    function_role, country_code, nationality_code, height, weight, disciplines, birth_date, 
+    birth_country, coach, hero, influence, reason, sporting_relatives, other_sports
+  )
+```
+
