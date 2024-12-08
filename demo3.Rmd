@@ -1,0 +1,393 @@
+```{r}
+
+
+library(tidyverse)
+install.packages("leaflet")
+install.packages("dplyr")
+install.packages("htmltools")
+install.packages("RColorBrewer")
+install.packages("rworldmap")
+install.packages("tidyverse")
+install.packages("showtext")
+install.packages("ggtext")
+install.packages("waffle")
+install.packages("MetBrewer")
+
+```
+
+
+```{r}
+beach_volleyball <- read_csv("Beach Volleyball.csv")
+volleyball <- read_csv("Volleyball.csv")
+teams <- read_csv("teams.csv")
+athletes <- read_csv("athletes.csv")
+```
+
+
+```{r}
+beach_volleyball_clean <- beach_volleyball %>%
+  select(date, event_code, gender, event_stage, stage, discipline_code, participant_code, 
+         participant_name, participant_country_code, result, result_WLT, start_order)
+
+volleyball_clean <- volleyball %>%
+    select(date, event_code, event_stage, gender, discipline_code, participant_code, 
+         participant_name, participant_country_code, result, result_WLT, start_order)
+
+athletes_clean <- athletes %>%
+    rename(function_role = 'function') |> 
+    mutate(code = as.character(code)) |>
+    select(code, name, gender, function_role, country_code, nationality_code, height, weight, 
+         disciplines, events, birth_date, birth_country, coach, hero, influence, 
+         reason, sporting_relatives, other_sports)
+```
+
+
+```{r}
+teams_expanded <- teams %>%
+    mutate(athletes_codes = gsub("\\[|\\]|'", "", athletes_codes)) |> 
+    separate_rows(athletes_codes, sep = ", ") %>%
+    rename(athlete_code = athletes_codes) %>%
+    left_join(athletes_clean, by = c("athlete_code" = "code")) %>%
+    select(code, team, team_gender, country, athlete_code, name)
+```
+
+
+```{r}
+
+volleyball_with_athletes <- volleyball_clean %>%
+  left_join(teams_expanded, by = c("participant_code" = "code"))
+
+beach_volleyball_athletes <- beach_volleyball_clean %>%
+  left_join(teams_expanded, by = c("participant_code" = "code"))
+
+
+combined_volleyball <- bind_rows(
+  mutate(beach_volleyball_athletes, dataset = "Beach Volleyball"),
+  mutate(volleyball_with_athletes, dataset = "Volleyball")
+)
+```
+
+
+```{r}
+final_combined <- combined_volleyball %>%
+  left_join(athletes_clean, by = c("athlete_code" = "code")) %>%
+  select(
+    date, event_code, gender.x, event_stage, stage, discipline_code, participant_code,
+    participant_name, participant_country_code, result, result_WLT, start_order,
+    team, team_gender, country, athlete_code, name.x, dataset, 
+    function_role, country_code, nationality_code, height, weight, disciplines, birth_date, 
+    birth_country, coach, hero, influence, reason, sporting_relatives, other_sports
+  )
+
+
+```
+
+
+
+
+```{r}
+
+# Load libraries
+library(ggplot2)
+library(dplyr)
+library(readxl)
+
+# Load the dataset
+data <- readxl::read_excel("final_combined.xlsx", sheet = "Sheet 1")
+
+# Filter data for Volleyball and Beach Volleyball
+vb_data <- data %>% filter(dataset == "Volleyball")
+beach_vb_data <- data %>% filter(dataset == "Beach Volleyball")
+
+# Aggregate wins by country
+vb_wins <- vb_data %>%
+  group_by(participant_country_code) %>%
+  summarise(total_vb_wins = sum(result, na.rm = TRUE))
+
+beach_vb_wins <- beach_vb_data %>%
+  group_by(participant_country_code) %>%
+  summarise(total_beach_vb_wins = sum(result, na.rm = TRUE))
+
+# Merge data for comparison
+comparison <- inner_join(vb_wins, beach_vb_wins, by = "participant_country_code") %>%
+  rename(Country = participant_country_code)
+
+# Reshape data for plotting
+comparison_long <- comparison %>%
+  gather(key = "Discipline", value = "Wins", total_vb_wins:total_beach_vb_wins) %>%
+  mutate(Discipline = factor(Discipline, levels = c("total_vb_wins", "total_beach_vb_wins"),
+                             labels = c("Volleyball", "Beach Volleyball")))
+
+# Plot two bar plots side by side
+ggplot(comparison_long, aes(x = reorder(Country, Wins), y = Wins, fill = Discipline)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  facet_wrap(~ Discipline, scales = "free_y") +
+  labs(title = "Top Performing Countries in Volleyball and Beach Volleyball",
+       x = "Country",
+       y = "Total Wins") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+# Filter data for Beach Volleyball and Brazil
+# Filter data for Volleyball (USA) and Beach Volleyball (Brazil)
+usa_vb_data <- data %>%
+  filter(dataset == "Volleyball")
+
+brazil_beach_vb_data <- data %>%
+  filter(dataset == "Beach Volleyball")
+
+# Aggregate performance by gender for USA Volleyball
+usa_vb_gender_performance <- usa_vb_data %>%
+  group_by(gender.x) %>%
+  summarise(total_wins = sum(result, na.rm = TRUE))
+
+# Aggregate performance by gender for Brazil Beach Volleyball
+brazil_beach_vb_gender_performance <- brazil_beach_vb_data %>%
+  group_by(gender.x) %>%
+  summarise(total_wins = sum(result, na.rm = TRUE))
+
+# Combine both datasets into a single data frame for plotting
+combined_gender_performance <- bind_rows(
+  usa_vb_gender_performance %>% mutate(sport = "Volleyball (USA)"),
+  brazil_beach_vb_gender_performance %>% mutate(sport = "Beach Volleyball (Brazil)")
+)
+
+# Plot combined data for Male vs Female performance
+ggplot(combined_gender_performance, aes(x = gender.x, y = total_wins, fill = gender.x)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Male vs Female Performance",
+       x = "Gender",
+       y = "Total Wins") +
+  facet_wrap(~ sport) +  # Facet by sport (Volleyball (USA) and Beach Volleyball (Brazil))
+  theme_minimal() +
+  scale_fill_manual(values = c("Male" = "blue", "Female" = "pink"))
+
+
+```
+
+```{r}
+# Categorize players into height ranges
+volleyball_height_data <- data %>%
+  filter(dataset == "Volleyball") %>%
+  mutate(height_category = case_when(
+    height < 180 ~ "Short (<180 cm)",
+    height >= 180 & height <= 200 ~ "Medium (180-200 cm)",
+    height > 200 ~ "Tall (>200 cm)"
+  ))
+
+# Aggregate wins by height category
+height_wins <- volleyball_height_data %>%
+  group_by(height_category) %>%
+  summarise(total_wins = sum(result, na.rm = TRUE)) %>%
+  arrange(desc(total_wins))
+
+# Plot wins based on height category
+ggplot(height_wins, aes(x = height_category, y = total_wins, fill = height_category)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Wins Based on Height in Volleyball",
+       x = "Height Category",
+       y = "Total Wins") +
+  theme_minimal() +
+  scale_fill_manual(values = c("Short (<180 cm)" = "blue",
+                               "Medium (180-200 cm)" = "green",
+                               "Tall (>200 cm)" = "orange"))
+
+```
+
+```{r}
+# Categorize players into height ranges
+beach_volleyball_height_data <- data %>%
+  filter(dataset == "Beach Volleyball") %>%
+  mutate(height_category = case_when(
+    height < 180 ~ "Short (<180 cm)",
+    height >= 180 & height <= 200 ~ "Medium (180-200 cm)",
+    height > 200 ~ "Tall (>200 cm)"
+  ))
+
+# Aggregate wins by height category
+beach_height_wins <- beach_volleyball_height_data %>%
+  group_by(height_category) %>%
+  summarise(total_wins = sum(result, na.rm = TRUE)) %>%
+  arrange(desc(total_wins))
+
+# Plot wins based on height category
+ggplot(beach_height_wins, aes(x = height_category, y = total_wins, fill = height_category)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Wins Based on Height in Beach Volleyball",
+       x = "Height Category",
+       y = "Total Wins") +
+  theme_minimal() +
+  scale_fill_manual(values = c("Short (<180 cm)" = "purple",
+                               "Medium (180-200 cm)" = "gold",
+                               "Tall (>200 cm)" = "red"))
+
+```
+
+
+```{r}
+
+# Calculate age directly from the birth_date column
+volleyball_age_data <- data %>%
+  filter(dataset == "Volleyball") %>%
+  mutate(
+    birth_year = year(birth_date),  # Extract the year from the birth_date
+    age = 2024 - birth_year         # Calculate age as of 2024
+  )
+
+# Aggregate wins by age and gender
+age_gender_wins <- volleyball_age_data %>%
+  group_by(age, gender.x) %>%
+  summarise(total_wins = sum(result, na.rm = TRUE)) %>%
+  arrange(age)
+
+# Plot wins based on age for males and females
+ggplot(age_gender_wins, aes(x = age, y = total_wins, color = gender.x)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 3) +
+  labs(
+    title = "Wins Based on Age for Volleyball (Male vs Female)",
+    x = "Age (in years)",
+    y = "Total Wins",
+    color = "Gender"
+  ) +
+  theme_minimal() +
+  scale_color_manual(values = c("Male" = "blue", "Female" = "pink"))
+
+
+```
+
+
+
+```{r}
+# Filter data for Volleyball and Beach Volleyball
+volleyball_data <- data %>% filter(dataset == "Volleyball")
+beach_volleyball_data <- data %>% filter(dataset == "Beach Volleyball")
+
+# Combine both datasets
+combined_data <- bind_rows(
+  volleyball_data %>% mutate(sport = "Volleyball"),
+  beach_volleyball_data %>% mutate(sport = "Beach Volleyball")
+)
+
+# Aggregate result_WLT based on start_order and sport
+combined_data_summary <- combined_data %>%
+  group_by(sport, start_order, result_WLT) %>%
+  summarise(count = n()) %>%
+  ungroup()
+
+# Plot for Volleyball and Beach Volleyball in a single plot
+ggplot(combined_data_summary, aes(x = result_WLT, y = count, fill = as.factor(start_order))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Influence of Start Order on Result (Volleyball vs Beach Volleyball)",
+       x = "Result (W/L/T)",
+       y = "Count",
+       fill = "Start Order") +
+  facet_wrap(~ sport) +  # Facet by sport (Volleyball and Beach Volleyball)
+  theme_minimal() +
+  scale_fill_manual(values = c("1" = "blue", "2" = "red"))
+
+```
+
+
+```{r}
+library(leaflet)
+library(dplyr)
+library(htmltools)
+library(rworldmap)
+
+# Summarize wins by country for Volleyball
+vb_wins <- data %>%
+  filter(dataset == "Volleyball") %>%
+  group_by(participant_country_code) %>%
+  summarise(Volleyball_Wins = sum(result == "W", na.rm = TRUE)) %>%
+  arrange(desc(Volleyball_Wins)) %>%
+  slice(1:4)  # Select top 4 countries
+
+# Summarize wins by country for Beach Volleyball
+beach_vb_wins <- data %>%
+  filter(dataset == "Beach Volleyball") %>%
+  group_by(participant_country_code) %>%
+  summarise(Beach_Volleyball_Wins = sum(result == "W", na.rm = TRUE)) %>%
+  arrange(desc(Beach_Volleyball_Wins)) %>%
+  slice(1:4)  # Select top 4 countries
+
+# Combine data for both disciplines
+top_countries <- vb_wins %>%
+  full_join(beach_vb_wins, by = "participant_country_code") %>%
+  mutate(
+    Total_Wins = coalesce(Volleyball_Wins, 0) + coalesce(Beach_Volleyball_Wins, 0),
+    Country = participant_country_code
+  )
+
+# Load world geospatial data
+world_map <- getMap(resolution = "low")
+
+# Match country codes with the geospatial data
+world_map@data <- left_join(world_map@data, top_countries, by = c("ISO_A3" = "Country"))
+
+# Define ranges and colors for Volleyball (9 colors)
+vb_ranges <- c(0, 5, 10, 15, 20, 25, 30, 35, 40, 50)
+vb_colors <- colorRampPalette(c("#e0f7fa", "#006064"))(9)  # Light to dark teal
+
+# Define ranges and colors for Beach Volleyball (9 colors)
+beach_vb_ranges <- c(0, 5, 10, 15, 20, 25, 30, 35, 40, 50)
+beach_vb_colors <- colorRampPalette(c("#fff3e0", "#e65100"))(9)  # Light to dark orange
+
+# Create palettes for both sports
+vb_palette <- colorBin(palette = vb_colors, bins = vb_ranges, domain = world_map@data$Volleyball_Wins, na.color = "#ffffff")
+beach_vb_palette <- colorBin(palette = beach_vb_colors, bins = beach_vb_ranges, domain = world_map@data$Beach_Volleyball_Wins, na.color = "#ffffff")
+
+# Generate leaflet map
+leaflet(world_map) %>%
+  addPolygons(
+    fillColor = ~vb_palette(Volleyball_Wins),
+    weight = 0,  # Remove outlines
+    fillOpacity = 0.85,
+    label = ~htmlEscape(paste(ADMIN, "<br>Volleyball Wins:", Volleyball_Wins)),
+    group = "Volleyball",
+    highlightOptions = highlightOptions(
+      fillOpacity = 1,
+      bringToFront = TRUE
+    )
+  ) %>%
+  addPolygons(
+    fillColor = ~beach_vb_palette(Beach_Volleyball_Wins),
+    weight = 0,  # Remove outlines
+    fillOpacity = 0.85,
+    label = ~htmlEscape(paste(ADMIN, "<br>Beach Volleyball Wins:", Beach_Volleyball_Wins)),
+    group = "Beach Volleyball",
+    highlightOptions = highlightOptions(
+      fillOpacity = 1,
+      bringToFront = TRUE
+    )
+  ) %>%
+  addLayersControl(
+    overlayGroups = c("Volleyball", "Beach Volleyball"),
+    options = layersControlOptions(collapsed = FALSE)
+  ) %>%
+  addLegend(
+    "bottomright",
+    pal = vb_palette,
+    values = ~Volleyball_Wins,
+    title = "Volleyball Wins",
+    opacity = 1,
+    group = "Volleyball"
+  ) %>%
+  addLegend(
+    "topright",
+    pal = beach_vb_palette,
+    values = ~Beach_Volleyball_Wins,
+    title = "Beach Volleyball Wins",
+    opacity = 1,
+    group = "Beach Volleyball"
+  ) %>%
+  addTiles()  # Add default map tiles
+
+
+```
+
+
