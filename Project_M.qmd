@@ -14,9 +14,22 @@ title-block-banner: "#f0f3f5"
 title-block-banner-color: black
 description: |
   <br/>Analyzing 🏐 2024 Paris Olympics Volleyball & Beach Volleyball<br/>
-
 ---
-
+```{r, echo=TRUE, eval=FALSE}
+# Install required libraries
+install.packages(c(
+  "tidyverse",
+  "dplyr",
+  "sf",
+  "ggiraph",
+  "patchwork",
+  "rnaturalearthdata",
+  "tidyr",
+  "ggplot2",
+  "plotly",
+  "jsonlite"
+), dependencies = TRUE)
+```
 <br/>
 
 :::: parallax-container
@@ -823,7 +836,6 @@ I, **JOSIN MICHAEL** had the primary responsibility of combing tables and materi
 I, **MOHAMMAD SAIHAN** had the primary responsibilty of creating the skeleton for the project, Quarto project design and analysis of plot-1.
 
 I, **SHISHIR ASHOKA** had the primary responsibility of analysis of plot 3 and conceptualization of stories.
-
 :::
 
 :::: parallax-container
@@ -832,4 +844,5 @@ I, **SHISHIR ASHOKA** had the primary responsibility of analysis of plot 3 and c
 ::::
 
 #### Source
+
 [GitHub Repo.](https://github.com/alagani414/R-Group-Project)
