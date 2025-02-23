@@ -1,8 +1,6 @@
 <div align="center">
     <h1 align="center">Beyond the Net: Insights into Volleyball Performance at Paris 2024</h1>
     <p align="center">An analytical deep dive into Olympic volleyball performance metrics.</p>
-
-Website → []()
 </div>
 
 ---
