@@ -19,7 +19,7 @@ This project analyzes **volleyball and beach volleyball performance** at the 202
 
 ---
 
-## 🔧 Data Adjustments
+## Data Adjustments
 ### Key Steps:
 1. **Column Selection & Renaming**  
    Focused on participant details, event results, and athlete attributes.
@@ -32,7 +32,7 @@ This project analyzes **volleyball and beach volleyball performance** at the 202
 
 ---
 
-## 📊 Analysis & Visualizations
+## Analysis & Visualizations
 ### 1. Geospatial and Statistical Dashboard
 - **Scatterplot**: Total matches vs. win percentage (experience correlates with success).  
 - **Bar Chart**: Match participation by country (USA leads in total matches).  
@@ -48,7 +48,7 @@ This project analyzes **volleyball and beach volleyball performance** at the 202
 
 ---
 
-## 🛠️ Tools & Libraries
+## Tools & Libraries
 ```r
 # R Packages
 library(ggplot2)    # Visualization
