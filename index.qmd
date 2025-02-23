@@ -1,0 +1,844 @@
+---
+title: "Beyond the Net: Insights into Volleyball Performance at Paris 2024"
+subtitle: "MOHAMMAD SAIHAN   |   UTHEJ ALAGANI   |   JOSIN MICHAEL   |   SHISHIR ASHOK"
+format:
+  html:
+    template-partials:
+      - ./template/title-block.html
+    code-fold: true
+    code-summary: "Show the code"
+editor: visual
+css: styles.css
+toc: true
+title-block-banner: "#f0f3f5"
+title-block-banner-color: black
+description: |
+  <br/>Analyzing 🏐 2024 Paris Olympics Volleyball & Beach Volleyball<br/>
+---
+
+<br/>
+
+:::: parallax-container
+::: parallax-image-container
+:::
+::::
+
+<br/>
+
+## Introduction
+
+::: column-margin
+Serve 🏐
+
+Pass 🏐
+
+Set 🏐
+
+Attack 🏐
+:::
+
+For our group project, we analyzed data from the **2024 Paris Olympics** 🏐, focusing on `Beach Volleyball` and `Volleyball`. We combined data from the Athletics 🏃 and team-based datasets, considering factors like `gender` 👩‍🦰👨‍🦱, `country` 🌍, `height` 📏, `age` 🎂, and `win ratios` 🏆. This approach allowed us to examine the interplay between individual attributes and team dynamics 🤝. By integrating these perspectives, we aimed to uncover patterns influencing performance and final outcomes.🥇
+
+:::: parallax-container
+::: parallax-image-container
+:::
+::::
+
+## Data-Adjustments
+
+**Column Selection and Renaming:**
+
+```         
+Selected relevant columns from all datasets to focus on key information for the analysis, such as participant details, event results, and athlete attributes.
+Renamed ambiguous columns for clarity and consistency across datasets.
+```
+
+**Data Merging and Expansion:**
+
+```         
+Combined datasets by joining teams with athletes, and then combining them with volleyball and beach volleyball datasets to enrich participant and event details.
+Expanded the teams dataset by separating athlete codes into individual rows and getting the names of all athletes belonging to their respective teams.
+```
+
+**Derived Columns and Missing Value Handling:**
+
+```         
+Calculated the total number of wins for each country based on the result_WLT column and added this as a new wins column.
+Handled missing values by replacing NA in the wins column with 0 to ensure completeness.
+Sorted the final dataset by the number of wins in descending order, followed by country names, to prioritize analysis by performance.
+```
+
+#### Libraries used :
+
+```{r}
+#| warning: false
+library(tidyverse)
+library(dplyr)
+library(sf)
+library(ggiraph)
+library(patchwork)
+library(rnaturalearthdata)
+library(tidyr)
+library(ggplot2)
+library(plotly)
+library(jsonlite)
+library(htmlwidgets)
+```
+
+::: callout-note
+Files used in this analysis: `teams.csv`, `athletes.csv`, `Volleyball.csv`, `Beach Volleyball.csv`.
+:::
+
+```{r}
+#| warning: false
+beach_volleyball <- read_csv("./data/Beach Volleyball.csv")
+volleyball <- read_csv("./data/Volleyball.csv")
+teams <- read_csv("./data/teams.csv")
+athletes <- read_csv("./data/athletes.csv")
+
+beach_volleyball_clean <- beach_volleyball |>
+  select(date, event_code, gender, event_stage, stage, discipline_code, participant_code, 
+         participant_name, participant_country_code, result, result_WLT, start_order)
+
+volleyball_clean <- volleyball |>
+    select(date, event_code, event_stage, gender, discipline_code, participant_code, 
+         participant_name, participant_country_code, result, result_WLT, start_order)
+
+athletes_clean <- athletes |>
+    rename(function_role = 'function') |> 
+    mutate(code = as.character(code)) |>
+    select(code, name, gender, function_role, country_code, nationality_code, height, weight, 
+         disciplines, events, birth_date, birth_country, coach, hero, influence, 
+         reason, sporting_relatives, other_sports)
+
+teams_expanded <- teams |>
+    mutate(athletes_codes = gsub("\\[|\\]|'", "", athletes_codes)) |> 
+    separate_rows(athletes_codes, sep = ", ") |>
+    rename(athlete_code = athletes_codes) |>
+    left_join(athletes_clean, by = c("athlete_code" = "code")) |>
+    select(code, team, team_gender, country, athlete_code, name)
+
+
+volleyball_with_athletes <- volleyball_clean |>
+  left_join(teams_expanded, by = c("participant_code" = "code"))
+
+beach_volleyball_athletes <- beach_volleyball_clean |>
+  left_join(teams_expanded, by = c("participant_code" = "code"))
+
+
+combined_volleyball <- bind_rows(
+  mutate(beach_volleyball_athletes, dataset = "Beach Volleyball"),
+  mutate(volleyball_with_athletes, dataset = "Volleyball")
+)
+
+final_combined <- combined_volleyball |>
+  left_join(athletes_clean, by = c("athlete_code" = "code")) |>
+  select(
+    date, event_code, gender.x, event_stage, stage, discipline_code, participant_code,
+    participant_name, participant_country_code, result, result_WLT, start_order,
+    team, team_gender, country, athlete_code, name.x, dataset, 
+    function_role, country_code, nationality_code, height, weight, disciplines, birth_date, 
+    birth_country, coach, hero, influence, reason, sporting_relatives, other_sports
+  )
+
+final_combined1<- final_combined |>
+  filter(event_code=="VVOMTEAM6" | event_code=="VVOWTEAM6") |>
+  filter(gender.x =="M")
+final_combined1W<- final_combined |>
+  filter(event_code=="VVOMTEAM6" | event_code=="VVOWTEAM6") |>
+  filter(gender.x =="W")
+final_combined2<- final_combined |>
+  filter(event_code=="VBVMTEAM2" | event_code=="VBVWTEAM2") |>
+filter(gender.x =="M")
+final_combined2W<- final_combined |>
+  filter(event_code=="VBVMTEAM2" | event_code=="VBVWTEAM2") |>
+  filter(gender.x =="W")
+```
+
+::: {.panel-tabset .nav-pills}
+## Men's Volleyball ScoreBoard
+
+```{r}
+#| warning: false
+library(DT)
+scoreboardVM <- final_combined1 |>
+  group_by(participant_name) |> 
+  summarize(
+    total_matches = n(),                                
+    total_score = sum(result, na.rm = TRUE),            
+    wins = sum(result_WLT == "W", na.rm = TRUE),        
+    losses = sum(result_WLT == "L", na.rm = TRUE),     
+    win_percentage = round((wins / total_matches) * 100, 2), 
+    .groups = "drop"
+  )
+
+scoreboardVM <- scoreboardVM |>
+  arrange(desc(total_score))
+datatable(scoreboardVM)
+```
+
+## Women's Volleyball Scoreboard
+
+```{r}
+#| warning: false
+library(DT)
+scoreboardVW <- final_combined1W |>
+  group_by(participant_name) |> 
+  summarize(
+    total_matches = n(),                                # Total matches played
+    total_score = sum(result, na.rm = TRUE),            # Total points scored
+    wins = sum(result_WLT == "W", na.rm = TRUE),        # Total wins
+    losses = sum(result_WLT == "L", na.rm = TRUE),      # Total losses
+    win_percentage = round((wins / total_matches) * 100, 2), # Win percentage
+    .groups = "drop"
+  )
+
+scoreboardVW <- scoreboardVW |>
+  arrange(desc(total_score))
+datatable(scoreboardVW)
+```
+
+## Men's Beach-Volleyball Scoreboard
+
+```{r}
+#| warning: false
+library(DT)
+scoreboardVMB <- final_combined2 |>
+  group_by(participant_name, country) |> 
+  summarize(
+    total_matches = n(),                                # Total matches played
+    total_score = sum(result, na.rm = TRUE),            # Total points scored
+    wins = sum(result_WLT == "W", na.rm = TRUE),        # Total wins
+    losses = sum(result_WLT == "L", na.rm = TRUE),      # Total losses
+    win_percentage = round((wins / total_matches) * 100, 2),
+    # Win percentage
+    .groups = "drop"
+  )
+
+scoreboardVMB <- scoreboardVMB |>
+  arrange(desc(total_score))
+datatable(scoreboardVMB)
+```
+
+## Women's Beach-Volleyball Scoreboard
+
+```{r}
+#| warning: false
+library(DT)
+scoreboardVWB <- final_combined2W |>
+  group_by(participant_name, country) |> 
+  summarize(
+    total_matches = n(),                                # Total matches played
+    total_score = sum(result, na.rm = TRUE),            # Total points scored
+    wins = sum(result_WLT == "W", na.rm = TRUE),        # Total wins
+    losses = sum(result_WLT == "L", na.rm = TRUE),      # Total losses
+    win_percentage = round((wins / total_matches) * 100, 2), # Win percentage
+    .groups = "drop"
+  )
+
+scoreboardVWB <- scoreboardVWB |>
+  arrange(desc(total_score))
+datatable(scoreboardVWB)
+```
+:::
+
+:::: callout-gradient
+::: callout-note
+Men's Volleyball : France🥇 , Poland🥈, USA 🥉
+
+Women's Volleyball : Italy🥇 , USA🥈, Brazil🥉
+
+Men's Beach-Volleyball : Norway🥇 , Germany🥈, Sweden 🥉
+
+Women's Beach-Volleyball : Brazil🥇 , Switzerland🥈, Canada 🥉
+:::
+::::
+
+:::: parallax-container
+::: parallax-image-container
+:::
+::::
+
+## Data Analysis
+
+### Geospatial and Statistical Visualization
+
+::: {.panel-tabset .nav-pills}
+## Volleyball
+
+```{r}
+#| warning: false
+#| out-width: 100%
+final_combinedBar<- final_combined |>
+  filter(event_code=="VVOMTEAM6" | event_code=="VVOWTEAM6")
+
+scoreboardV <- final_combinedBar |>
+  group_by(participant_name) |> 
+  summarize(
+    total_matches = n(),                                # Total matches played
+    total_score = sum(result, na.rm = TRUE),            # Total points scored
+    wins = sum(result_WLT == "W", na.rm = TRUE),        # Total wins
+    losses = sum(result_WLT == "L", na.rm = TRUE),     # Total draws
+    win_percentage = round((wins / total_matches) * 100, 2), # Win percentage
+    .groups = "drop"
+  )
+
+scoreboardV <- scoreboardV |>
+  mutate(participant_name = case_when(
+    participant_name == "People's Republic of China" ~ "China",
+    participant_name == "Dominican Republic" ~ "Dominican Rep.",
+    participant_name == "Türkiye" ~ "Turkey",
+    TRUE ~ participant_name  # Keep other names unchanged
+  ))
+
+world_sf <- read_sf("https://raw.githubusercontent.com/holtzy/R-graph-gallery/master/DATA/world.geojson")
+world_sf <- world_sf |>
+  filter(!name %in% c("Antarctica", "Greenland"))
+
+
+world_sf <- world_sf |>
+  left_join(scoreboardV, by = c("name" = "participant_name"))
+
+p1 <- ggplot(world_sf, aes(
+  total_matches,
+  win_percentage,
+  tooltip = name,
+  data_id = name,
+  color = name
+)) +
+  geom_point_interactive(size = 3) +   # Interactive points
+  theme_minimal() +                   # Minimal theme
+  theme(
+    axis.title.x =element_text(size = 6),   # Remove x-axis title
+    axis.title.y = element_text(size =6),   # Remove y-axis title
+    legend.position = "none"          # Remove legend
+  )
+# Create the second chart (Bar plot)
+
+p2 <- ggplot(world_sf, aes(
+  x = reorder(name, name),
+  y = total_score,
+  tooltip = name,
+  data_id = name,
+  fill = name
+)) +
+  geom_col_interactive(data = filter(world_sf, !is.na(total_score))) +
+  coord_flip() +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 6),                       
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.position = "none"
+  )
+
+# Create the third chart (Choropleth)
+p3 <- ggplot() +
+  geom_sf(data = world_sf, fill = "lightgrey", color = "lightgrey") +
+  geom_sf_interactive(
+    data = filter(world_sf, !is.na(total_score)),
+    aes(fill = name, tooltip = name, data_id = name)
+  ) +
+  coord_sf(crs = st_crs(3857)) +
+  theme_void() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.position = "none"
+  )
+
+# Combine the plots
+combined_plot <- (p1 + p2) / p3 + plot_layout(heights = c(1, 2))
+
+# Create the interactive plot
+interactive_plot <- girafe(ggobj = combined_plot)
+interactive_plot <- girafe_options(
+  interactive_plot,
+  opts_hover(css = "fill:red;stroke:black;")
+)
+
+
+
+# Display the plot
+interactive_plot
+
+```
+
+This visualization provides an insightful overview of Olympic volleyball trends across three components: a scatterplot, a bar chart, and a world map 🌍. **The scatterplot (top left)** highlights the relationship between the total matches played and win percentages. Teams with more match experience tend to have higher win rates 🏆, with each colorful dot representing a different country or team.
+
+**The bar chart (top right)** showcases the number of matches played by various countries, with the USA leading the pack, followed by strong contenders like Turkey, Poland, and Brazil. On the other hand, countries like Argentina and Canada have fewer matches, reflecting varying levels of participation.
+
+**The world map (bottom)** offers a geographical perspective, highlighting countries with significant involvement in Olympic volleyball 🌎. Regions like North and South America, Europe, and parts of Asia shine brightly with active participation 🏐, while areas like Africa remain underrepresented. This visualization beautifully showcases volleyball's global reach and highlights the regional disparities in dominance and participation levels. 🌟
+
+## Beach-Volleyball
+
+```{r, warning=FALSE, out.width="100px"}
+#| warning: false
+#| out-width: 100%
+final_combinedBar2<- final_combined |>
+  filter(event_code=="VBVMTEAM2" | event_code=="VBVWTEAM2")
+
+scoreboardV2 <- final_combinedBar2 |>
+  group_by(country) |> 
+  summarize(
+    total_matches = n(),                                # Total matches played
+    total_score = sum(result, na.rm = TRUE),            # Total points scored
+    wins = sum(result_WLT == "W", na.rm = TRUE),        # Total wins
+    losses = sum(result_WLT == "L", na.rm = TRUE),     # Total draws
+    win_percentage = round((wins / total_matches) * 100, 2), # Win percentage
+    .groups = "drop"
+  )
+scoreboardV2 <- scoreboardV2 |>
+  mutate(country = case_when(
+    country == "United States" ~ "United States of America",
+    TRUE ~ country  # Keep other names unchanged
+  ))
+
+world_sf <- read_sf("https://raw.githubusercontent.com/holtzy/R-graph-gallery/master/DATA/world.geojson")
+world_sf <- world_sf |>
+  filter(!name %in% c("Antarctica", "Greenland"))
+
+
+world_sf2 <- world_sf |>
+  left_join(scoreboardV2, by = c("name" = "country"))
+
+p12 <- ggplot(world_sf2, aes(
+  total_matches,
+  win_percentage,
+  tooltip = name,
+  data_id = name,
+  color = name
+)) +
+  geom_point_interactive(size = 3) +   # Interactive points
+  theme_minimal() +                   # Minimal theme
+  theme(
+    
+    axis.title.x =element_text(size = 6),   # Remove x-axis title
+    axis.title.y = element_text(size =6),   # Remove y-axis title
+    legend.position = "none"          # Remove legend
+  )
+# Create the second chart (Bar plot)
+p22 <- ggplot(world_sf2, aes(
+  x = reorder(name, name),
+  y = total_score,
+  tooltip = name,
+  data_id = name,
+  fill = name
+)) +
+  geom_col_interactive(data = filter(world_sf2, !is.na(total_score))) +
+  coord_flip() +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 5),                
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.position = "none"
+  )
+
+# Create the third chart (Choropleth)
+p32 <- ggplot() +
+  geom_sf(data = world_sf2, fill = "lightgrey", color = "lightgrey") +
+  geom_sf_interactive(
+    data = filter(world_sf2, !is.na(total_score)),
+    aes(fill = name, tooltip = name, data_id = name)
+  ) +
+  coord_sf(crs = st_crs(3857)) +
+  theme_void() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.position = "none"
+  )
+
+# Combine the plots
+combined_plot2 <- (p12 + p22) / p32 + plot_layout(heights = c(1, 2))
+
+# Create the interactive plot
+interactive_plot2 <- girafe(ggobj = combined_plot2)
+interactive_plot2 <- girafe_options(
+  interactive_plot2,
+  opts_hover(css = "fill:red;stroke:black;")
+)
+interactive_plot2
+```
+
+**Scatter Plot (Top Left)**: It shows a distribution of countries based on their total matches played and their win percentages. The point's color differentiates the countries. ✨ Countries with high win percentages also often have a significant number of matches played, demonstrating dominance. 🏆
+
+**Bar Chart (Top Right)**: Highlights the total matches played by each country, with countries ranked vertically. 🌍 The United States leads significantly in total matches, followed by Australia and Sweden, among others. 📊
+
+**World Map (Bottom)**: A geographic map where countries are shaded to depict performance or participation levels. 🌎 High-performing nations like the USA and Australia are visually prominent. 🗺️
+:::
+
+### Parallel coordinate plots
+
+```{r}
+#| warning: false
+#| out-width: 100%
+volleyball_data <- final_combined |>
+  filter(dataset == "Volleyball") |>
+  mutate(
+    birth_year = year(birth_date),
+    age = 2024 - birth_year,
+    total_wins = result
+  ) |>
+  select(country, age, total_wins, height) |>  
+  drop_na()  
+
+volleyball_data_scaled <- volleyball_data |>
+  mutate(across(c(age, total_wins, height), scale))
+
+volleyball_long <- volleyball_data_scaled |>
+  mutate(row = row_number(),
+         tooltip_text = paste0("Country: ", country, "<br>Age: ", round(age, 2), 
+                               "<br>Wins: ", round(total_wins, 2), 
+                               "<br>Height: ", round(height, 2))) |>
+  pivot_longer(cols = c(age, total_wins, height), names_to = "variable", values_to = "value")
+
+volleyball_long$variable <- factor(volleyball_long$variable, levels = c("age", "total_wins", "height"))
+
+volleyball_plot <- ggplot(volleyball_long, aes(x = variable, y = value, group = row, color = country,
+                                               tooltip = tooltip_text, data_id = row)) + geom_line(size = 0.5) +
+  labs( x = "Variable", y = "Scaled Value") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+beach_volleyball_data <- final_combined |>
+  filter(dataset == "Beach Volleyball") |>
+  mutate(
+    birth_year = year(birth_date),
+    age = 2024 - birth_year,
+    total_wins = result
+  ) |>
+  select(country, age, total_wins, height) |>  
+  drop_na()  
+
+beach_volleyball_data_scaled <- beach_volleyball_data |>
+  mutate(across(c(age, total_wins, height), scale))
+
+beach_volleyball_long <- beach_volleyball_data_scaled |>
+  mutate(row = row_number(),
+         tooltip_text = paste0("Country: ", country, "<br>Age: ", round(age, 2), 
+                               "<br>Wins: ", round(total_wins, 2), 
+                               "<br>Height: ", round(height, 2))) |>
+  pivot_longer(cols = c(age, total_wins, height), names_to = "variable", values_to = "value")
+
+beach_volleyball_long$variable <- factor(beach_volleyball_long$variable, levels = c("age", "total_wins", "height"))
+
+beach_volleyball_plot <- ggplot(beach_volleyball_long, 
+                                 aes(x = variable, y = value, group = row, 
+                                     color = country, tooltip = tooltip_text, data_id = row)) +
+  geom_line(size = 0.5) +
+  labs(title = "Beach Volleyball & Volleyball",  # Add title
+       x = "Variable", y = "Scaled Value") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Style the title
+        legend.position = "none")
+
+combined_plot <- (volleyball_plot | beach_volleyball_plot) +
+  plot_layout(guides = "collect")
+
+volleyball_interactive <- ggplotly(volleyball_plot, tooltip = "tooltip")
+beach_volleyball_interactive <- ggplotly(beach_volleyball_plot, tooltip = "tooltip")
+
+subplot(volleyball_interactive, beach_volleyball_interactive, nrows = 1, shareY=TRUE)
+```
+
+In the previous plot, we see how different countries performed 🏐🌍, illustrated with a world map view 🗺️. Now, we dive into the factors influencing athlete performance 💪. **Parallel coordinate plots** 📊 compare `age`, `total wins`, and `height` of players in `Volleyball` and `Beach Volleyball` datasets. Each line represents a player, and colors correspond to their `country` 🎨.
+
+Standardized variables ✏️ mean values are adjusted so they’re centered around the average and scaled based on variation (standard deviation), making them easier to compare. Tight cluster 🌀 for age suggests most players are of similar middle-age. Significant variation 🔀 in total wins shows some players/countries excel, especially in Beach Volleyball, where the spread is broader 🏖️. Moderate variation in height reflects some physical diversity but is more consistent than performance metrics. The interactive functionality 🖱️✨ lets users hover over individual lines to explore data on `country`, `age`, `wins`, and `height` 🧐. Observing Volleyball and Beach Volleyball plots side by side reveals clear differences and trends 📉📈.
+
+The next plot will further explore height variation 📏 across countries 🌏.
+
+### Athlete Height Scatter Plot
+
+```{r}
+#| warning: False
+
+beach_volleyball_clean <- beach_volleyball |> 
+  select(date, event_code, gender, event_stage, stage, discipline_code, participant_code, 
+         participant_name, participant_country_code, result, result_WLT, start_order)
+
+volleyball_clean <- volleyball |> 
+    select(date, event_code, event_stage, gender, discipline_code, participant_code, 
+         participant_name, participant_country_code, result, result_WLT, start_order)
+
+athletes_clean <- athletes |> 
+    rename(function_role = 'function') |> 
+    mutate(code = as.character(code)) |>
+    select(code, name, gender, function_role, country_code, nationality_code, height, weight, 
+         disciplines, events, birth_date, birth_country, coach, hero, influence, 
+         reason, sporting_relatives, other_sports)
+
+teams_expanded <- teams |> 
+    mutate(athletes_codes = gsub("\\[|\\]|'", "", athletes_codes)) |> 
+    separate_rows(athletes_codes, sep = ", ") |> 
+    rename(athlete_code = athletes_codes) |> 
+    left_join(athletes_clean, by = c("athlete_code" = "code")) |> 
+    select(code, team, team_gender, country, athlete_code, name)
+
+
+
+volleyball_with_athletes <- volleyball_clean |> 
+  left_join(teams_expanded, by = c("participant_code" = "code"))
+
+beach_volleyball_athletes <- beach_volleyball_clean |> 
+  left_join(teams_expanded, by = c("participant_code" = "code"))
+
+
+combined_volleyball <- bind_rows(
+  mutate(beach_volleyball_athletes, dataset = "Beach Volleyball"),
+  mutate(volleyball_with_athletes, dataset = "Volleyball")
+)
+
+
+final_combined <- combined_volleyball |> 
+    left_join(athletes_clean, by = c("athlete_code" = "code")) |> 
+    mutate(date = format(date, "%Y-%m-%d")) |> 
+    select(
+        date, event_code, gender.x, event_stage, stage, discipline_code, participant_code,
+        participant_name, participant_country_code, result, result_WLT, start_order,
+        team, team_gender, country, athlete_code, name.x, dataset, 
+        function_role, country_code, nationality_code, height, weight, disciplines, birth_date, 
+        birth_country, coach, hero, influence, reason, sporting_relatives, other_sports
+    )
+
+countries <- unique(final_combined$country)
+
+win_count <- final_combined |> 
+    filter(result_WLT == "W") |> 
+    count(country, name = "wins")
+
+final_combined <- final_combined |> 
+    left_join(win_count, by = "country") |> 
+    mutate(wins = replace_na(wins, 0)) |> 
+    arrange(desc(wins), country)
+```
+
+::::: {#container style="display: flex; gap: 20px;"}
+::: {#interactive-table style="flex: 1; overflow: auto; height: 600px; border: 1px solid #ccc; padding: 10px; padding-top: 0px"}
+:::
+
+::: {#plot-container style="flex: 1; height: 400px;"}
+```{r, echo=FALSE}
+jsonData <- toJSON(final_combined, dataframe = "rows")
+
+p <- ggplot(final_combined, aes(x = height, y = gender.x)) +
+  geom_point_interactive(
+    aes(
+      tooltip = paste("Name:", name.x, "<br>Country:", country, "<br>Team:", participant_code),
+      data_id = paste("unique", country, participant_code, gender.x, sep = "_")
+    ),
+    position = position_jitter(width = 0.2, height = 0.4),  # Add jitter on x-axis
+    size = 3, 
+    color = "gray"
+  ) +
+  theme_minimal() +
+  labs(x = "Height", y = "Gender")
+
+# Convert to ggiraph object
+ggiraph_plot <- ggiraph::girafe(ggobj = p, width_svg = 7, height_svg = 10)
+
+ggiraph_plot <- onRender(ggiraph_plot, "
+  function(el, x) {
+    el.querySelector('.girafe_container_std').classList.add('girafe_height');
+  }
+")
+#ggiraph_plot <- girafe_options(ggiraph_plot, opts_hover(css = "fill: red;"))
+ggiraph_plot
+
+```
+:::
+:::::
+
+```{=html}
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        let currentView = "country"; // Tracks the current view
+        let countryData = {}; // Holds country-level data
+        let teamData = {}; // Holds team-level data for selected country
+        let olympicsData = []; // Holds the entire dataset
+        // Function to initialize the table with country data
+        function initializeTable(data) {
+            olympicsData = data;
+            countryData = data.reduce((acc, row) => {
+                if (!acc[row.country]) acc[row.country] = { totalHeight: 0, count: 0, totalWins: row.wins };
+                acc[row.country].totalHeight += row.height;
+                acc[row.country].count += 1;
+                return acc;
+            }, {})
+            const countryTableData = Object.keys(countryData).map(country => ({
+                name: country,
+                averageHeight: (countryData[country].totalHeight / countryData[country].count).toFixed(2),
+                totalWins: countryData[country].totalWins,
+            }));
+            updateTable(countryTableData, "Countries");
+        }
+        // Function to show team-level data for a selected country
+        function showTeams(country) {
+            currentView = "team";
+            teamData = olympicsData.filter(row => row.country === country).reduce((acc, row) => {
+                if (!acc[row.participant_code]) acc[row.participant_code] = { totalHeight: 0, count: 0, sport: row.dataset };
+                acc[row.participant_code].totalHeight += row.height;
+                acc[row.participant_code].count += 1;
+                return acc;
+            }, {});
+            const teamTableData = Object.keys(teamData).map(team => ({
+                name: team,
+                averageHeight: (teamData[team].totalHeight / teamData[team].count).toFixed(2),
+                sport: teamData[team].sport
+            }));
+            updateTable(teamTableData, `Teams in ${country}`, true);
+        }
+        // Function to update the table content
+        function updateTable(data, title, showBackButton = false) {
+            const tableContainer = document.getElementById("interactive-table");
+            tableContainer.innerHTML = ""; // Clear existing table
+            const header = document.createElement("h3");
+            header.textContent = title;
+            tableContainer.appendChild(header);
+            if (showBackButton) {
+                const backButton = document.createElement("button");
+                backButton.textContent = "Back";
+                backButton.onclick = () => {
+                currentView = "country";
+                updateTable(Object.keys(countryData).map(country => ({
+                    name: country,
+                    averageHeight: (countryData[country].totalHeight / countryData[country].count).toFixed(2),
+                    totalWins: countryData[country].totalWins,
+                })), "Countries");
+                };
+                tableContainer.appendChild(backButton);
+            }
+            const table = document.createElement("table");
+            table.style.borderCollapse = "collapse";
+            table.style.width = "100%";
+            const headerRow = document.createElement("tr");
+            const columns = currentView === "country" ? ["Name", "Average Height", "Total Wins"] : ["Name", "Average Height", "Sport"];
+            columns.forEach(col => {
+                const th = document.createElement("th");
+                th.textContent = col;
+                th.style.border = "1px solid #ddd";
+                th.style.padding = "10px";
+                th.style.backgroundColor = "#f4f4f4";
+                th.style.textAlign = "left";
+                th.style.position = "sticky";
+                th.style.top = "0";
+                th.style.zIndex = "1";
+                headerRow.appendChild(th);
+            });
+            table.appendChild(headerRow);
+            data.forEach(row => {
+                const tableRow = document.createElement("tr");
+                tableRow.style.cursor = currentView === "country" ? "pointer" : "default";
+                tableRow.onclick = () => {
+                if (currentView === "country") showTeams(row.name);
+                };
+                tableRow.onmouseover = () => {
+                    tableRow.style.backgroundColor = "#f0f8ff";
+                    console.log(`{row.name}, {row.wins}`);
+                    highlightCountry(row.name);
+                };
+                tableRow.onmouseout = () => {
+                    tableRow.style.backgroundColor = "";
+                    const points = plotElement.querySelectorAll("circle");
+                    points.forEach((point) => {
+                        const data_id = point.getAttribute("data-id");
+                        if (data_id.startsWith("unique")) {
+                          point.style.fill = ""; // Reset fill color
+                          point.style.stroke = ""; // Reset border
+                        }
+                    });
+                };
+                const rowitems = currentView === "country" ? ["name", "averageHeight", "totalWins"] : ["name", "averageHeight", "sport"]
+                rowitems.forEach(col => {
+                const td = document.createElement("td");
+                td.textContent = row[col];
+                td.style.border = "1px solid #ddd";
+                td.style.padding = "10px";
+                tableRow.appendChild(td);
+                });
+                table.appendChild(tableRow);
+            });
+            tableContainer.appendChild(table);
+        }
+        // Get the ggiraph plot
+        const plotElement = document.querySelector(".girafe_height"); // Adjust the plot ID if needed
+        // Function to highlight points in the plot based on country
+        function highlightCountry(identifier) {
+            // Select all the points in the plot
+            const points = plotElement.querySelectorAll("circle");
+            points.forEach((point) => {
+                // Get the country and gender associated with this point from the data_id attribute
+                const data_id = point.getAttribute("data-id");
+                console.log(data_id);
+                if (data_id.startsWith("unique")) {
+                  const [ignore_identifier,country, team, gender] = data_id.split("_");
+                  console.log(data_id, country, team, gender);
+                  // Highlight points that match the hovered country or team
+                  if (country === identifier || team === identifier) {
+                      // Assign color based on gender
+                      let highlightColor = "grey"; // Default to grey
+                      if (gender === "M") {
+                          highlightColor = "#f4a261";  
+                      } else if (gender === "W") {
+                          highlightColor = "#17a2b8";  
+                      }
+                      point.style.fill = highlightColor;  // Highlight the point
+                      point.style.stroke = "black";  // Optional: Add a border to the highlighted points
+                      point.parentNode.appendChild(point);  // Move the highlighted point to the front
+                  } else {
+                      point.style.fill = "";  // Reset the color for non-matching points
+                      point.style.stroke = "";  // Reset border
+                  }
+                }
+            });
+        }
+        // Inject the R dataset as a JavaScript variable
+        const original_data = `r jsonData`;
+        initializeTable(original_data);
+    });
+</script>
+```
+
+Height Distribution Across Genders:
+
+The scatter plot shows the distribution of `heights` by `gender`, with points slightly jittered to improve visibility 📊. Male participants generally have a taller average height compared to females 👨 vs 👩. This pattern is seen across most countries, as shown in the `Average Height` column 📏, `Country Performance` and `Height`:
+
+Countries like the United States , Italy , and Brazil , with higher win counts, also tend to have taller average heights. This suggests a possible link between height and performance in sports like volleyball 🏐 and basketball 🏀, where height is an advantage 🏆. However, countries like Cuba **(202.50 cm average height)** and Norway **(196.50 cm)** still have notably tall athletes, but their win count is lower, indicating that while height can contribute, it's not the sole factor in achieving success 🌟.
+
+:::: parallax-container
+::: parallax-image-container
+:::
+::::
+
+## Conclusion
+
+This **analysis of the 2024 Paris Olympics Volleyball and Beach Volleyball data** 🏐 revealed how individual attributes and team dynamics influence performance. 📊 Data adjustments, including column selection, renaming, and merging datasets, enriched the analysis by linking participant details with event outcomes and team structures.
+
+📈 Visualizations, such as scatterplots and bar charts, highlighted a **positive correlation** between `total matches` played and `win percentages`, with teams like France and the USA excelling through experience and strategy. The world map 🗺️ showcased regional dominance by countries in North and South America 🌎 and Europe 🌍, while Africa 🌍 remained underrepresented.
+
+📏 Height distribution plots indicated that taller athletes, particularly in countries like Cuba and Slovenia , often had a competitive advantage. However, success also depended on teamwork and strategy, as seen in Norway’s Beach Volleyball performance. 🌊
+
+📊 Parallel coordinate plots standardized variables like `age`, `height`, and `wins`, revealing age clustering and performance variability.
+
+Ultimately, while physical attributes like height and match exposure are crucial, success is a multifaceted outcome shaped by skill, coordination, and resource investment. 💪🤝
+
+:::: parallax-container
+::: parallax-image-container
+:::
+::::
+
+::: callout-note
+I, **UTHEJ ALAGANI** had the primary responsibility of analysis of plot 2, conclusion and the summary part.
+
+I, **JOSIN MICHAEL** had the primary responsibility of combing tables and materials in data adjustments,and introduction.
+
+I, **MOHAMMAD SAIHAN** had the primary responsibilty of creating the skeleton for the project, Quarto project design and analysis of plot-1.
+
+I, **SHISHIR ASHOKA** had the primary responsibility of analysis of plot 3 and conceptualization of stories.
+:::
+
+:::: parallax-container
+::: parallax-image-container
+:::
+::::

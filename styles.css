@@ -45,3 +45,31 @@
     transform: translate3d(4px, 0, 0);
   }
 }
+
+/* Style for the scrollable table */
+#interactive-table {
+    overflow-y: auto;
+    height: 600px; /* Ensure the height matches the plot container */
+}
+table {
+    width: 40%;
+}
+th, td {
+    text-align: left;
+    padding: 10px;
+    border: 1px solid #ddd;
+}
+th {
+    background-color: #f4f4f4;
+}
+tr:hover {
+    background-color: #f0f8ff;
+}
+#plot-container {
+    width: 100%; /* Adjust this based on your layout needs */
+    height: 600px; /* Set to a larger value for a bigger plot */
+}
+.girafe_container_std {
+    width: 100%;
+    height: 100%;
+}
